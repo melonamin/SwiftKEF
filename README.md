@@ -12,7 +12,7 @@ A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II,
 
 - 🔊 **Volume Control**: Set volume, mute/unmute
 - 🎵 **Playback Control**: Play/pause, next/previous track
-- 📻 **Source Selection**: Switch between inputs (WiFi, Bluetooth, Optical, etc.)
+- 📻 **Source Selection**: Switch between inputs (WiFi, Bluetooth, Optic, etc.)
 - 🔌 **Power Management**: Turn speakers on/off
 - ℹ️ **Speaker Information**: Get name, MAC address, firmware details
 - 🎼 **Track Information**: Get current playing track metadata
@@ -98,7 +98,7 @@ if status == .poweredOn {
 ```swift
 // Set input source
 try await speaker.setSource(.bluetooth)
-try await speaker.setSource(.optical)
+try await speaker.setSource(.optic)
 
 // Get current source
 let source = try await speaker.getSource()
