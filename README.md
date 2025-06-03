@@ -230,7 +230,7 @@ This Swift implementation is inspired by the [pykefcontrol](https://github.com/N
 
 ## Author
 
-Your Name - [@melonamin](https://github.com/melonamin)
+[@melonamin](https://github.com/melonamin)
 
 ## Links
 
