@@ -9,8 +9,7 @@ let package = Package(
         .macOS(.v10_15),
         .iOS(.v13),
         .tvOS(.v13),
-        .watchOS(.v6),
-        // Linux supported through Swift Package Manager
+        .watchOS(.v6)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -28,10 +27,18 @@ let package = Package(
             name: "SwiftKEF",
             dependencies: [
                 .product(name: "AsyncHTTPClient", package: "async-http-client")
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableExperimentalFeature("StrictConcurrency")
             ]),
         .testTarget(
             name: "SwiftKEFTests",
-            dependencies: ["SwiftKEF"]
+            dependencies: ["SwiftKEF"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
         ),
     ]
 )

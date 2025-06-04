@@ -1,11 +1,11 @@
 # SwiftKEF
 
-A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II, LS60) over the network.
+A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II, LS60) over the network with real-time event monitoring.
 
 > **Disclaimer**: This project is not affiliated with, authorized by, endorsed by, or in any way officially connected with KEF Audio or its subsidiaries. All product names, trademarks and registered trademarks are property of their respective owners.
 
 ![Swift](https://img.shields.io/badge/Swift-6.1-orange.svg)
-![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20iOS%20%7C%20tvOS%20%7C%20watchOS-blue.svg)
+![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20iOS%20%7C%20tvOS%20%7C%20watchOS%20%7C%20Linux-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen.svg)
 
 ## Features
@@ -16,6 +16,8 @@ A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II,
 - 🔌 **Power Management**: Turn speakers on/off
 - ℹ️ **Speaker Information**: Get name, MAC address, firmware details
 - 🎼 **Track Information**: Get current playing track metadata
+- 🔄 **Real-time Event Monitoring**: Live updates for volume, playback, and track changes
+- ⏱️ **Song Position Tracking**: Monitor playback progress in real-time
 - ⚡ **Async/Await**: Modern Swift concurrency support
 - 🛡️ **Type Safety**: Strongly typed enums for sources and status
 
@@ -27,7 +29,7 @@ Add SwiftKEF to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/melonamin/SwiftKEF.git", from: "1.0.0")
+    .package(url: "https://github.com/melonamin/SwiftKEF.git", from: "1.1.0")
 ]
 ```
 
@@ -39,7 +41,7 @@ Or add it through Xcode:
 ## Requirements
 
 - Swift 6.1+
-- macOS 10.15+ / iOS 13+ / tvOS 13+ / watchOS 6+
+- macOS 10.15+ / iOS 13+ / tvOS 13+ / watchOS 6+ / Linux
 - KEF wireless speaker on the same network
 
 ## Usage
@@ -131,6 +133,13 @@ if isPlaying {
     print("Now playing: \(songInfo.title ?? "Unknown")")
     print("Artist: \(songInfo.artist ?? "Unknown")")
     print("Album: \(songInfo.album ?? "Unknown")")
+    
+    // Get playback position
+    if let position = try await speaker.getSongPosition(),
+       let duration = try await speaker.getSongDuration() {
+        let progress = Double(position) / Double(duration)
+        print("Progress: \(Int(progress * 100))%")
+    }
 }
 ```
 
@@ -163,11 +172,54 @@ do {
 }
 ```
 
+### Real-time Event Monitoring
+
+Monitor speaker status changes in real-time using the polling API. The speaker sends immediate updates when any monitored parameter changes:
+
+```swift
+// Single poll for current events
+let event = try await speaker.pollSpeaker(timeout: 10)
+if let volume = event.volume {
+    print("Volume changed to: \(volume)")
+}
+
+// Continuous polling stream
+let eventStream = await speaker.startPolling(
+    pollInterval: 10,      // Check for events every 10 seconds
+    pollSongStatus: true   // Include real-time song position updates
+)
+
+for try await event in eventStream {
+    // Handle volume changes
+    if let volume = event.volume {
+        print("Volume: \(volume)")
+    }
+    
+    // Handle source changes
+    if let source = event.source {
+        print("Source: \(source.rawValue)")
+    }
+    
+    // Handle playback updates
+    if let state = event.playbackState {
+        print("Playback: \(state.rawValue)")
+    }
+    
+    // Track position updates (when pollSongStatus is true)
+    if let position = event.songPosition,
+       let duration = event.songDuration {
+        let progress = Double(position) / Double(duration)
+        print("Progress: \(Int(progress * 100))%")
+    }
+}
+```
+
 ## Example Applications
 
-### Command Line Tool
+### Command Line Tools
 
-See the [KEFControl CLI](https://github.com/melonamin/KEFControl) for a complete command-line interface built with this library.
+- [KefirCLI](https://github.com/melonamin/KefirCLI) - Feature-rich CLI with interactive TUI mode and real-time updates
+- [KEFControl](https://github.com/melonamin/KEFControl) - Simple command-line interface
 
 ### SwiftUI Example
 

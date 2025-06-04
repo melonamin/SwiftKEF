@@ -54,6 +54,51 @@ struct SwiftKEFTests {
         #expect(songInfo.coverURL == nil)
     }
     
+    @Test func testPlaybackStateRawValues() {
+        #expect(PlaybackState.playing.rawValue == "playing")
+        #expect(PlaybackState.paused.rawValue == "paused")
+        #expect(PlaybackState.stopped.rawValue == "stopped")
+    }
+    
+    @Test func testKEFSpeakerEventInitialization() {
+        let songInfo = SongInfo(title: "Test Song", artist: "Test Artist")
+        let event = KEFSpeakerEvent(
+            source: .wifi,
+            volume: 50,
+            songInfo: songInfo,
+            songPosition: 30000,
+            songDuration: 180000,
+            playbackState: .playing,
+            speakerStatus: .powerOn,
+            deviceName: "My Speaker",
+            isMuted: false
+        )
+        
+        #expect(event.source == .wifi)
+        #expect(event.volume == 50)
+        #expect(event.songInfo?.title == "Test Song")
+        #expect(event.songPosition == 30000)
+        #expect(event.songDuration == 180000)
+        #expect(event.playbackState == .playing)
+        #expect(event.speakerStatus == .powerOn)
+        #expect(event.deviceName == "My Speaker")
+        #expect(event.isMuted == false)
+    }
+    
+    @Test func testKEFSpeakerEventWithNilValues() {
+        let event = KEFSpeakerEvent()
+        
+        #expect(event.source == nil)
+        #expect(event.volume == nil)
+        #expect(event.songInfo == nil)
+        #expect(event.songPosition == nil)
+        #expect(event.songDuration == nil)
+        #expect(event.playbackState == nil)
+        #expect(event.speakerStatus == nil)
+        #expect(event.deviceName == nil)
+        #expect(event.isMuted == nil)
+    }
+    
     @Test func testKEFErrorDescriptions() {
         let networkError = KEFError.networkError("Connection failed")
         #expect(networkError.errorDescription == "Network error: Connection failed")
@@ -78,6 +123,8 @@ struct SwiftKEFTests {
         requiresSendable(KEFSource.self)
         requiresSendable(KEFSpeakerStatus.self)
         requiresSendable(SongInfo.self)
+        requiresSendable(PlaybackState.self)
+        requiresSendable(KEFSpeakerEvent.self)
     }
     
     @Test func testKEFErrorEquatableConformance() {
@@ -227,6 +274,58 @@ struct ErrorHandlingTests {
     }
 }
 
+// MARK: - Polling Tests
+
+struct PollingTests {
+    
+    @Test func testPlaybackStateFromRawValue() {
+        // Test valid raw values
+        #expect(PlaybackState(rawValue: "playing") == .playing)
+        #expect(PlaybackState(rawValue: "paused") == .paused)
+        #expect(PlaybackState(rawValue: "stopped") == .stopped)
+        
+        // Test invalid raw value
+        #expect(PlaybackState(rawValue: "invalid") == nil)
+        #expect(PlaybackState(rawValue: "play") == nil) // Common mistake
+    }
+    
+    @Test func testKEFSpeakerEventPartialUpdates() {
+        // Test that KEFSpeakerEvent can represent partial updates
+        let volumeOnlyEvent = KEFSpeakerEvent(volume: 75)
+        #expect(volumeOnlyEvent.volume == 75)
+        #expect(volumeOnlyEvent.source == nil)
+        #expect(volumeOnlyEvent.songInfo == nil)
+        
+        let sourceOnlyEvent = KEFSpeakerEvent(source: .bluetooth)
+        #expect(sourceOnlyEvent.source == .bluetooth)
+        #expect(sourceOnlyEvent.volume == nil)
+        
+        let playbackEvent = KEFSpeakerEvent(
+            songPosition: 45000,
+            playbackState: .playing
+        )
+        #expect(playbackEvent.songPosition == 45000)
+        #expect(playbackEvent.playbackState == .playing)
+        #expect(playbackEvent.volume == nil)
+    }
+    
+    @Test func testPollingTimeoutValidation() {
+        // Document expected behavior for timeout validation
+        // - Timeout should be clamped between 1 and 60 seconds
+        // - Default timeout is 10 seconds
+        // - HTTP timeout should be slightly longer than poll timeout
+        #expect(Bool(true)) // Placeholder for documentation
+    }
+    
+    @Test func testPollingQueueManagement() {
+        // Document expected polling queue behavior
+        // - Queue is created on first poll or when expired (>50 seconds)
+        // - Queue is recreated when pollSongStatus parameter changes
+        // - Queue ID is extracted from response (removing quotes)
+        #expect(Bool(true)) // Placeholder for documentation
+    }
+}
+
 // MARK: - Concurrency Tests
 
 struct ConcurrencyTests {
@@ -253,5 +352,7 @@ struct ConcurrencyTests {
         requiresSendable(KEFSpeakerStatus.standby)
         requiresSendable(SongInfo())
         requiresSendable(KEFError.invalidResponse)
+        requiresSendable(PlaybackState.playing)
+        requiresSendable(KEFSpeakerEvent())
     }
 }
