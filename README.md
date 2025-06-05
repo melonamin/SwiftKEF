@@ -18,6 +18,7 @@ A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II,
 - 🎼 **Track Information**: Get current playing track metadata
 - 🔄 **Real-time Event Monitoring**: Live updates for volume, playback, and track changes
 - ⏱️ **Song Position Tracking**: Monitor playback progress in real-time
+- 🔍 **Auto-Discovery**: Find KEF speakers on your network using mDNS/Bonjour (Apple platforms)
 - ⚡ **Async/Await**: Modern Swift concurrency support
 - 🛡️ **Type Safety**: Strongly typed enums for sources and status
 
@@ -58,8 +59,31 @@ defer {
     try await httpClient.shutdown()
 }
 
-// Initialize speaker
+// Initialize speaker with known IP
 let speaker = KEFSpeaker(host: "192.168.1.100", httpClient: httpClient)
+```
+
+### Speaker Discovery (Apple platforms only)
+
+```swift
+// Discover speakers on the network
+let speakers = try await KEFSpeaker.discover(httpClient: httpClient, timeout: 5.0)
+for discovered in speakers {
+    print("Found: \(discovered.name) at \(discovered.host)")
+    
+    // Create speaker instance from discovery
+    let speaker = KEFSpeaker.from(discovered: discovered, httpClient: httpClient)
+}
+
+// Or use real-time discovery stream
+for await discovered in KEFSpeaker.discoverStream(httpClient: httpClient) {
+    print("Discovered: \(discovered.name) at \(discovered.host)")
+    
+    // Optional: Check model and MAC address
+    if let model = discovered.model {
+        print("Model: \(model)")
+    }
+}
 ```
 
 ### Volume Control

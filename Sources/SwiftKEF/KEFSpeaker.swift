@@ -716,7 +716,9 @@ public actor KEFSpeaker {
         endpoint: String, params: [String: String], method: HTTPMethod = .GET,
         jsonBody: [String: Any]? = nil, timeout: TimeAmount = .seconds(10)
     ) async throws -> String {
-        var urlComponents = URLComponents(string: "http://\(host)\(endpoint)")!
+        guard var urlComponents = URLComponents(string: "http://\(host)\(endpoint)") else {
+            throw KEFError.invalidURL
+        }
 
         if method == .GET && !params.isEmpty {
             urlComponents.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
@@ -732,13 +734,13 @@ public actor KEFSpeaker {
         if let jsonBody = jsonBody {
             request.headers.add(name: "Content-Type", value: "application/json")
             let jsonData = try JSONSerialization.data(withJSONObject: jsonBody)
-            request.body = .bytes(ByteBuffer(data: jsonData))
+            request.body = HTTPClientRequest.Body.bytes(ByteBuffer(data: jsonData))
         }
 
         do {
             let response = try await httpClient.execute(request, timeout: timeout)
 
-            guard response.status == .ok else {
+            guard response.status == HTTPResponseStatus.ok else {
                 throw KEFError.networkError("HTTP \(response.status.code)")
             }
 
