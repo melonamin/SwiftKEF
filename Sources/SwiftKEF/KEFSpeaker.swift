@@ -734,7 +734,7 @@ public actor KEFSpeaker {
         if let jsonBody = jsonBody {
             request.headers.add(name: "Content-Type", value: "application/json")
             let jsonData = try JSONSerialization.data(withJSONObject: jsonBody)
-            request.body = HTTPClientRequest.Body.bytes(ByteBuffer(data: jsonData))
+            request.body = HTTPClientRequest.Body.bytes(ByteBuffer(bytes: jsonData))
         }
 
         do {

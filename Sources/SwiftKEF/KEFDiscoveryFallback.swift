@@ -1,6 +1,11 @@
 #if !canImport(Network)
 import Foundation
 import AsyncHTTPClient
+#if os(Linux)
+import Glibc
+#else
+import Darwin
+#endif
 
 /// Represents a discovered KEF speaker on the network
 public struct DiscoveredSpeaker: Sendable, Equatable {
@@ -62,7 +67,7 @@ public actor KEFDiscovery {
     private func getLocalSubnet() async throws -> String {
         // Try to determine local IP by connecting to a public DNS
         // This is a common technique to find the local IP
-        let tempSocket = socket(AF_INET, SOCK_DGRAM, 0)
+        let tempSocket = socket(AF_INET, Int32(SOCK_DGRAM.rawValue), 0)
         if tempSocket < 0 {
             // Fallback to common subnet
             return "192.168.1"
@@ -173,7 +178,7 @@ public actor KEFDiscovery {
 }
 
 // Helper function for timeout
-private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+private func withTimeout<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T {
     try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask {
             try await operation()
