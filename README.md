@@ -16,6 +16,7 @@ A Swift library for controlling KEF wireless speakers (LSX II, LS50 Wireless II,
 - 🔌 **Power Management**: Turn speakers on/off
 - ℹ️ **Speaker Information**: Get name, MAC address, firmware details
 - 🎼 **Track Information**: Get current playing track metadata
+- 🎚️ **Music Quality**: Get active stream codec/bitrate/sample rate (when available)
 - 🔄 **Real-time Event Monitoring**: Live updates for volume, playback, and track changes
 - ⏱️ **Song Position Tracking**: Monitor playback progress in real-time
 - 🔍 **Auto-Discovery**: Find KEF speakers on your network using mDNS/Bonjour (Apple platforms)
@@ -114,7 +115,7 @@ try await speaker.shutdown()
 
 // Check power status
 let status = try await speaker.getStatus()
-if status == .poweredOn {
+if status == .powerOn {
     print("Speaker is on")
 }
 ```
@@ -158,6 +159,22 @@ if isPlaying {
     print("Artist: \(songInfo.artist ?? "Unknown")")
     print("Album: \(songInfo.album ?? "Unknown")")
     
+    // Get active music quality information (when available)
+    // This is parsed from `trackRoles.mediaData.activeResource`
+    let quality = try await speaker.getSongQuality()
+    if quality.codec != nil || quality.bitRate != nil {
+        print("Codec: \(quality.codec ?? "Unknown")")
+        if let bitRate = quality.bitRate {
+            print("Bitrate: \(Int(Double(bitRate) / 1000)) kbps")
+        }
+        if let sampleFrequency = quality.sampleFrequency, let bitsPerSample = quality.bitsPerSample {
+            print("Format: \(bitsPerSample)-bit / \(sampleFrequency) Hz")
+        }
+        if let channels = quality.nrAudioChannels {
+            print("Channels: \(channels)")
+        }
+    }
+
     // Get playback position
     if let position = try await speaker.getSongPosition(),
        let duration = try await speaker.getSongDuration() {
@@ -165,6 +182,21 @@ if isPlaying {
         print("Progress: \(Int(progress * 100))%")
     }
 }
+```
+
+### Music Quality (Active Resource)
+
+`getSongQuality()` returns a `SongQuality` struct parsed from `player:player/data` → `trackRoles.mediaData.activeResource`.
+All fields are optional and may be `nil` depending on the source/service and what the speaker reports.
+
+```swift
+let quality = try await speaker.getSongQuality()
+
+print("Codec: \(quality.codec ?? "Unknown")")
+print("Bitrate: \(quality.bitRate.map { "\($0) bps" } ?? "Unknown")")
+print("Sample frequency: \(quality.sampleFrequency.map(String.init) ?? "Unknown")")
+print("Bits per sample: \(quality.bitsPerSample.map(String.init) ?? "Unknown")")
+print("Channels: \(quality.nrAudioChannels.map(String.init) ?? "Unknown")")
 ```
 
 ### Speaker Information
