@@ -37,6 +37,38 @@ public struct SongInfo: Sendable, Equatable {
     }
 }
 
+/// Contains information about the active audio resource / playback quality
+public struct SongQuality: Sendable, Equatable {
+    public let minBitRate: Int?
+    public let maxBitRate: Int?
+    public let bitRate: Int?
+    public let sampleFrequency: Int?
+    public let bitsPerSample: Int?
+    public let codec: String?
+    public let nrAudioChannels: Int?
+    public let mimeType: String?
+
+    public init(
+        minBitRate: Int? = nil,
+        maxBitRate: Int? = nil,
+        bitRate: Int? = nil,
+        sampleFrequency: Int? = nil,
+        bitsPerSample: Int? = nil,
+        codec: String? = nil,
+        nrAudioChannels: Int? = nil,
+        mimeType: String? = nil
+    ) {
+        self.minBitRate = minBitRate
+        self.maxBitRate = maxBitRate
+        self.bitRate = bitRate
+        self.sampleFrequency = sampleFrequency
+        self.bitsPerSample = bitsPerSample
+        self.codec = codec
+        self.nrAudioChannels = nrAudioChannels
+        self.mimeType = mimeType
+    }
+}
+
 /// Represents the playback state of the speaker
 public enum PlaybackState: String, Sendable {
     case playing = "playing"
@@ -362,6 +394,27 @@ public actor KEFSpeaker {
             artist: metaData["artist"] as? String,
             album: metaData["album"] as? String,
             coverURL: trackRoles["icon"] as? String
+        )
+    }
+
+    /// Get information about the currently playing track's active audio resource
+    /// - Returns: Music quality information from `trackRoles.mediaData.activeResource`
+    public func getSongQuality() async throws -> SongQuality {
+        let playerData = try await getPlayerData()
+
+        let trackRoles = playerData["trackRoles"] as? [String: Any] ?? [:]
+        let mediaData = trackRoles["mediaData"] as? [String: Any] ?? [:]
+        let activeResource = mediaData["activeResource"] as? [String: Any] ?? [:]
+
+        return SongQuality(
+            minBitRate: activeResource["minBitRate"] as? Int,
+            maxBitRate: activeResource["maxBitRate"] as? Int,
+            bitRate: activeResource["bitRate"] as? Int,
+            sampleFrequency: activeResource["sampleFrequency"] as? Int,
+            bitsPerSample: activeResource["bitsPerSample"] as? Int,
+            codec: activeResource["codec"] as? String,
+            nrAudioChannels: activeResource["nrAudioChannels"] as? Int,
+            mimeType: activeResource["mimeType"] as? String
         )
     }
 
