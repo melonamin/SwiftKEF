@@ -53,6 +53,41 @@ struct SwiftKEFTests {
         #expect(songInfo.album == nil)
         #expect(songInfo.coverURL == nil)
     }
+
+    @Test func testSongQualityInitialization() {
+        let quality = SongQuality(
+            minBitRate: 390_784,
+            maxBitRate: 1_049_269,
+            bitRate: 639_809,
+            sampleFrequency: 44_100,
+            bitsPerSample: 16,
+            codec: "FLAC",
+            nrAudioChannels: 2,
+            mimeType: "audio/unknown"
+        )
+
+        #expect(quality.minBitRate == 390_784)
+        #expect(quality.maxBitRate == 1_049_269)
+        #expect(quality.bitRate == 639_809)
+        #expect(quality.sampleFrequency == 44_100)
+        #expect(quality.bitsPerSample == 16)
+        #expect(quality.codec == "FLAC")
+        #expect(quality.nrAudioChannels == 2)
+        #expect(quality.mimeType == "audio/unknown")
+    }
+
+    @Test func testSongQualityWithNilValues() {
+        let quality = SongQuality()
+
+        #expect(quality.minBitRate == nil)
+        #expect(quality.maxBitRate == nil)
+        #expect(quality.bitRate == nil)
+        #expect(quality.sampleFrequency == nil)
+        #expect(quality.bitsPerSample == nil)
+        #expect(quality.codec == nil)
+        #expect(quality.nrAudioChannels == nil)
+        #expect(quality.mimeType == nil)
+    }
     
     @Test func testPlaybackStateRawValues() {
         #expect(PlaybackState.playing.rawValue == "playing")
@@ -123,6 +158,7 @@ struct SwiftKEFTests {
         requiresSendable(KEFSource.self)
         requiresSendable(KEFSpeakerStatus.self)
         requiresSendable(SongInfo.self)
+        requiresSendable(SongQuality.self)
         requiresSendable(PlaybackState.self)
         requiresSendable(KEFSpeakerEvent.self)
     }
@@ -149,6 +185,15 @@ struct DataModelTests {
         
         #expect(songInfo1 == songInfo2)
         #expect(songInfo1 != songInfo3)
+    }
+
+    @Test func testSongQualityEquatable() {
+        let quality1 = SongQuality(bitRate: 123, sampleFrequency: 44_100, bitsPerSample: 16, codec: "FLAC", nrAudioChannels: 2)
+        let quality2 = SongQuality(bitRate: 123, sampleFrequency: 44_100, bitsPerSample: 16, codec: "FLAC", nrAudioChannels: 2)
+        let quality3 = SongQuality(bitRate: 999, sampleFrequency: 48_000, bitsPerSample: 24, codec: "AAC", nrAudioChannels: 2)
+
+        #expect(quality1 == quality2)
+        #expect(quality1 != quality3)
     }
     
     @Test func testKEFSourceDescription() {
@@ -351,6 +396,7 @@ struct ConcurrencyTests {
         requiresSendable(KEFSource.wifi)
         requiresSendable(KEFSpeakerStatus.standby)
         requiresSendable(SongInfo())
+        requiresSendable(SongQuality())
         requiresSendable(KEFError.invalidResponse)
         requiresSendable(PlaybackState.playing)
         requiresSendable(KEFSpeakerEvent())
