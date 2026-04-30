@@ -771,22 +771,46 @@ public actor KEFSpeaker {
     public func startPolling(pollInterval: Int = 10, pollSongStatus: Bool = false) -> AsyncThrowingStream<KEFSpeakerEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                // Number of consecutive failures we will tolerate before
+                // surfacing the most recent error to the consumer. The old
+                // behaviour was to retry indefinitely on anything other than
+                // `.speakerNotResponding`, which masked real connection loss
+                // (e.g. the Mac leaving the LAN) — the consumer's loop would
+                // sit on `for try await event in stream { ... }` forever
+                // without ever throwing, so it could not detect the failure.
+                let maxConsecutiveFailures = 5
+                var consecutiveFailures = 0
+                var lastError: Error?
+
                 do {
                     while !Task.isCancelled {
                         do {
                             let event = try await pollSpeaker(timeout: pollInterval, pollSongStatus: pollSongStatus)
                             continuation.yield(event)
+                            consecutiveFailures = 0
+                            lastError = nil
                         } catch {
-                            // Only throw if it's a critical error
+                            // Surface unrecoverable speaker errors immediately.
                             if case KEFError.speakerNotResponding = error {
                                 continuation.finish(throwing: error)
                                 break
                             }
-                            // For other errors, wait a bit and retry
+                            consecutiveFailures += 1
+                            lastError = error
+                            // After enough back-to-back failures, give up so
+                            // the consumer can decide what to do (reconnect,
+                            // surface UI, etc.) instead of being stuck waiting.
+                            if consecutiveFailures >= maxConsecutiveFailures {
+                                continuation.finish(throwing: lastError ?? error)
+                                break
+                            }
+                            // Brief backoff before retrying.
                             try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds
                         }
                     }
-                    continuation.finish()
+                    if !Task.isCancelled, lastError == nil {
+                        continuation.finish()
+                    }
                 } catch {
                     continuation.finish(throwing: error)
                 }
