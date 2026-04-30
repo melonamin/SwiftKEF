@@ -12,6 +12,37 @@ public enum KEFSource: String, CaseIterable, Sendable {
     case coaxial = "coaxial"
     case analog = "analog"
     case usb = "usb"
+
+    /// Decode a `kefPhysicalSource` value reported by a speaker, accepting
+    /// known firmware-specific spellings.
+    ///
+    /// Some KEF firmwares (observed on LSX II) report the optical input as
+    /// "optical" rather than "optic" — depending on which spelling was last
+    /// used to set it (the official KEF mobile app sends "optical"). Use this
+    /// helper instead of `init(rawValue:)` when decoding values coming from
+    /// the speaker so both spellings map to the same case.
+    public static func parse(_ raw: String) -> KEFSource? {
+        if let direct = KEFSource(rawValue: raw) { return direct }
+        switch raw {
+        case "optical": return .optic
+        default: return nil
+        }
+    }
+
+    /// The string to send to the speaker when SETTING this source.
+    ///
+    /// Most cases use the enum's `rawValue` directly. The exception is
+    /// `.optic`, where some firmwares treat "optic" and "optical" as
+    /// DIFFERENT physical inputs — "optical" is the actual TOSLINK input on
+    /// LSX II, while "optic" is unmapped and silently falls back to Wi-Fi.
+    /// Sending "optical" works on every firmware tested so far, so use it as
+    /// the canonical wire value for the optical input.
+    var wireValue: String {
+        switch self {
+        case .optic: return "optical"
+        default: return rawValue
+        }
+    }
 }
 
 /// Represents the power status of a KEF speaker
@@ -259,7 +290,7 @@ public actor KEFSpeaker {
     /// - Parameter source: The desired input source
     public func setSource(_ source: KEFSource) async throws {
         let payload = """
-            {"type":"kefPhysicalSource","kefPhysicalSource":"\(source.rawValue)"}
+            {"type":"kefPhysicalSource","kefPhysicalSource":"\(source.wireValue)"}
             """
 
         let params = [
@@ -298,7 +329,7 @@ public actor KEFSpeaker {
             // This shouldn't happen if we're querying an active speaker, but handle gracefully
             throw KEFError.speakerNotResponding
         default:
-            guard let source = KEFSource(rawValue: sourceString) else {
+            guard let source = KEFSource.parse(sourceString) else {
                 throw KEFError.jsonParsingError
             }
             return source
@@ -670,7 +701,7 @@ public actor KEFSpeaker {
             case "settings:/kef/play/physicalSource":
                 if let sourceStr = valueDict["kefPhysicalSource"] as? String,
                    sourceStr != "standby" && sourceStr != "powerOn" {
-                    source = KEFSource(rawValue: sourceStr)
+                    source = KEFSource.parse(sourceStr)
                 }
                 
             case "player:player/data/playTime":

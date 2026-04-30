@@ -223,11 +223,24 @@ struct DataModelTests {
         #expect(KEFSource(rawValue: "coaxial") == .coaxial)
         #expect(KEFSource(rawValue: "analog") == .analog)
         #expect(KEFSource(rawValue: "usb") == .usb)
-        
+
         // Test invalid raw value
         #expect(KEFSource(rawValue: "invalid") == nil)
-        #expect(KEFSource(rawValue: "optical") == nil) // Common mistake
         #expect(KEFSource(rawValue: "standby") == nil) // Not a source
+    }
+
+    @Test func testKEFSourceParseAcceptsFirmwareAliases() {
+        // `parse` should accept everything `init(rawValue:)` accepts...
+        for source in KEFSource.allCases {
+            #expect(KEFSource.parse(source.rawValue) == source)
+        }
+        // ...plus firmware-specific aliases. Newer KEF firmwares (LSX II)
+        // report the optical input as "optical" rather than "optic" depending
+        // on which spelling was last used to set it.
+        #expect(KEFSource.parse("optical") == .optic)
+        // And it should still reject unknown values.
+        #expect(KEFSource.parse("invalid") == nil)
+        #expect(KEFSource.parse("standby") == nil)
     }
 }
 
