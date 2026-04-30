@@ -769,12 +769,36 @@ public actor KEFSpeaker {
         endpoint: String, params: [String: String], method: HTTPMethod = .GET,
         jsonBody: [String: Any]? = nil, timeout: TimeAmount = .seconds(10)
     ) async throws -> String {
+        // Newer KEF firmwares (observed on LSX II) reject GET on /api/setData
+        // with HTTP 405 ("Invalid method!") and reject POST with form-encoded
+        // params with HTTP 415. They require POST with a JSON body where the
+        // "value" field is a JSON object, not a string. Translate the existing
+        // GET-with-string-value calling convention into a proper POST+JSON
+        // request transparently so all setData callers keep working unchanged.
+        var effectiveMethod = method
+        var effectiveParams = params
+        var effectiveJSONBody = jsonBody
+        if endpoint == "/api/setData" && method == .GET && jsonBody == nil {
+            effectiveMethod = .POST
+            var body: [String: Any] = [:]
+            for (key, value) in params {
+                if key == "value", let data = value.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: data) {
+                    body[key] = parsed
+                } else {
+                    body[key] = value
+                }
+            }
+            effectiveJSONBody = body
+            effectiveParams = [:]
+        }
+
         guard var urlComponents = URLComponents(string: "http://\(host)\(endpoint)") else {
             throw KEFError.invalidURL
         }
 
-        if method == .GET && !params.isEmpty {
-            urlComponents.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        if effectiveMethod == .GET && !effectiveParams.isEmpty {
+            urlComponents.queryItems = effectiveParams.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
 
         guard let url = urlComponents.url else {
@@ -782,9 +806,9 @@ public actor KEFSpeaker {
         }
 
         var request = HTTPClientRequest(url: url.absoluteString)
-        request.method = method
+        request.method = effectiveMethod
 
-        if let jsonBody = jsonBody {
+        if let jsonBody = effectiveJSONBody {
             request.headers.add(name: "Content-Type", value: "application/json")
             let jsonData = try JSONSerialization.data(withJSONObject: jsonBody)
             request.body = HTTPClientRequest.Body.bytes(ByteBuffer(bytes: jsonData))
