@@ -4,7 +4,7 @@ import NIOCore
 import NIOHTTP1
 
 /// Represents the available input sources for KEF speakers
-public enum KEFSource: String, CaseIterable, Sendable {
+public enum KEFSource: String, Codable, CaseIterable, Sendable {
     case wifi = "wifi"
     case bluetooth = "bluetooth"
     case tv = "tv"
@@ -12,6 +12,37 @@ public enum KEFSource: String, CaseIterable, Sendable {
     case coaxial = "coaxial"
     case analog = "analog"
     case usb = "usb"
+
+    /// Decode a `kefPhysicalSource` value reported by a speaker, accepting
+    /// known firmware-specific spellings.
+    ///
+    /// Some KEF firmwares (observed on LSX II) report the optical input as
+    /// "optical" rather than "optic" — depending on which spelling was last
+    /// used to set it (the official KEF mobile app sends "optical"). Use this
+    /// helper instead of `init(rawValue:)` when decoding values coming from
+    /// the speaker so both spellings map to the same case.
+    public static func parse(_ raw: String) -> KEFSource? {
+        if let direct = KEFSource(rawValue: raw) { return direct }
+        switch raw {
+        case "optical": return .optic
+        default: return nil
+        }
+    }
+
+    /// The string to send to the speaker when SETTING this source.
+    ///
+    /// Most cases use the enum's `rawValue` directly. The exception is
+    /// `.optic`, where some firmwares treat "optic" and "optical" as
+    /// DIFFERENT physical inputs — "optical" is the actual TOSLINK input on
+    /// LSX II, while "optic" is unmapped and silently falls back to Wi-Fi.
+    /// Sending "optical" works on every firmware tested so far, so use it as
+    /// the canonical wire value for the optical input.
+    var wireValue: String {
+        switch self {
+        case .optic: return "optical"
+        default: return rawValue
+        }
+    }
 }
 
 /// Represents the power status of a KEF speaker
@@ -259,7 +290,7 @@ public actor KEFSpeaker {
     /// - Parameter source: The desired input source
     public func setSource(_ source: KEFSource) async throws {
         let payload = """
-            {"type":"kefPhysicalSource","kefPhysicalSource":"\(source.rawValue)"}
+            {"type":"kefPhysicalSource","kefPhysicalSource":"\(source.wireValue)"}
             """
 
         let params = [
@@ -298,7 +329,7 @@ public actor KEFSpeaker {
             // This shouldn't happen if we're querying an active speaker, but handle gracefully
             throw KEFError.speakerNotResponding
         default:
-            guard let source = KEFSource(rawValue: sourceString) else {
+            guard let source = KEFSource.parse(sourceString) else {
                 throw KEFError.jsonParsingError
             }
             return source
@@ -670,7 +701,7 @@ public actor KEFSpeaker {
             case "settings:/kef/play/physicalSource":
                 if let sourceStr = valueDict["kefPhysicalSource"] as? String,
                    sourceStr != "standby" && sourceStr != "powerOn" {
-                    source = KEFSource(rawValue: sourceStr)
+                    source = KEFSource.parse(sourceStr)
                 }
                 
             case "player:player/data/playTime":
@@ -740,22 +771,46 @@ public actor KEFSpeaker {
     public func startPolling(pollInterval: Int = 10, pollSongStatus: Bool = false) -> AsyncThrowingStream<KEFSpeakerEvent, Error> {
         AsyncThrowingStream { continuation in
             Task {
+                // Number of consecutive failures we will tolerate before
+                // surfacing the most recent error to the consumer. The old
+                // behaviour was to retry indefinitely on anything other than
+                // `.speakerNotResponding`, which masked real connection loss
+                // (e.g. the Mac leaving the LAN) — the consumer's loop would
+                // sit on `for try await event in stream { ... }` forever
+                // without ever throwing, so it could not detect the failure.
+                let maxConsecutiveFailures = 5
+                var consecutiveFailures = 0
+                var lastError: Error?
+
                 do {
                     while !Task.isCancelled {
                         do {
                             let event = try await pollSpeaker(timeout: pollInterval, pollSongStatus: pollSongStatus)
                             continuation.yield(event)
+                            consecutiveFailures = 0
+                            lastError = nil
                         } catch {
-                            // Only throw if it's a critical error
+                            // Surface unrecoverable speaker errors immediately.
                             if case KEFError.speakerNotResponding = error {
                                 continuation.finish(throwing: error)
                                 break
                             }
-                            // For other errors, wait a bit and retry
+                            consecutiveFailures += 1
+                            lastError = error
+                            // After enough back-to-back failures, give up so
+                            // the consumer can decide what to do (reconnect,
+                            // surface UI, etc.) instead of being stuck waiting.
+                            if consecutiveFailures >= maxConsecutiveFailures {
+                                continuation.finish(throwing: lastError ?? error)
+                                break
+                            }
+                            // Brief backoff before retrying.
                             try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds
                         }
                     }
-                    continuation.finish()
+                    if !Task.isCancelled, lastError == nil {
+                        continuation.finish()
+                    }
                 } catch {
                     continuation.finish(throwing: error)
                 }
@@ -769,12 +824,36 @@ public actor KEFSpeaker {
         endpoint: String, params: [String: String], method: HTTPMethod = .GET,
         jsonBody: [String: Any]? = nil, timeout: TimeAmount = .seconds(10)
     ) async throws -> String {
+        // Newer KEF firmwares (observed on LSX II) reject GET on /api/setData
+        // with HTTP 405 ("Invalid method!") and reject POST with form-encoded
+        // params with HTTP 415. They require POST with a JSON body where the
+        // "value" field is a JSON object, not a string. Translate the existing
+        // GET-with-string-value calling convention into a proper POST+JSON
+        // request transparently so all setData callers keep working unchanged.
+        var effectiveMethod = method
+        var effectiveParams = params
+        var effectiveJSONBody = jsonBody
+        if endpoint == "/api/setData" && method == .GET && jsonBody == nil {
+            effectiveMethod = .POST
+            var body: [String: Any] = [:]
+            for (key, value) in params {
+                if key == "value", let data = value.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: data) {
+                    body[key] = parsed
+                } else {
+                    body[key] = value
+                }
+            }
+            effectiveJSONBody = body
+            effectiveParams = [:]
+        }
+
         guard var urlComponents = URLComponents(string: "http://\(host)\(endpoint)") else {
             throw KEFError.invalidURL
         }
 
-        if method == .GET && !params.isEmpty {
-            urlComponents.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        if effectiveMethod == .GET && !effectiveParams.isEmpty {
+            urlComponents.queryItems = effectiveParams.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
 
         guard let url = urlComponents.url else {
@@ -782,9 +861,9 @@ public actor KEFSpeaker {
         }
 
         var request = HTTPClientRequest(url: url.absoluteString)
-        request.method = method
+        request.method = effectiveMethod
 
-        if let jsonBody = jsonBody {
+        if let jsonBody = effectiveJSONBody {
             request.headers.add(name: "Content-Type", value: "application/json")
             let jsonData = try JSONSerialization.data(withJSONObject: jsonBody)
             request.body = HTTPClientRequest.Body.bytes(ByteBuffer(bytes: jsonData))
