@@ -4,7 +4,7 @@ import NIOCore
 import NIOHTTP1
 
 /// Represents the available input sources for KEF speakers
-public enum KEFSource: String, CaseIterable, Sendable {
+public enum KEFSource: String, Codable, CaseIterable, Sendable {
     case wifi = "wifi"
     case bluetooth = "bluetooth"
     case tv = "tv"
