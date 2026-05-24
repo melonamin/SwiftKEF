@@ -185,17 +185,11 @@ public actor KEFSpeaker {
     /// Turn the speaker off (standby mode)
     public func shutdown() async throws {
         // Use "standby" for power control (not a source)
-        let payload = """
-            {"type":"kefPhysicalSource","kefPhysicalSource":"standby"}
-            """
-
-        let params = [
-            "path": "settings:/kef/play/physicalSource",
-            "roles": "value",
-            "value": payload,
-        ]
-
-        _ = try await makeRequest(endpoint: "/api/setData", params: params)
+        try await setData(
+            path: "settings:/kef/play/physicalSource",
+            roles: "value",
+            value: ["type": "kefPhysicalSource", "kefPhysicalSource": "standby"]
+        )
     }
 
     // MARK: - Volume Control
@@ -216,17 +210,11 @@ public actor KEFSpeaker {
     /// - Parameter volume: Volume level from 0 to 100
     public func setVolume(_ volume: Int) async throws {
         let clampedVolume = max(0, min(100, volume))
-        let payload = """
-            {"type":"i32_","i32_":\(clampedVolume)}
-            """
-
-        let params = [
-            "path": "player:volume",
-            "roles": "value",
-            "value": payload,
-        ]
-
-        _ = try await makeRequest(endpoint: "/api/setData", params: params)
+        try await setData(
+            path: "player:volume",
+            roles: "value",
+            value: ["type": "i32_", "i32_": clampedVolume]
+        )
     }
 
     /// Get the current volume level
@@ -258,17 +246,11 @@ public actor KEFSpeaker {
     /// Set the input source
     /// - Parameter source: The desired input source
     public func setSource(_ source: KEFSource) async throws {
-        let payload = """
-            {"type":"kefPhysicalSource","kefPhysicalSource":"\(source.rawValue)"}
-            """
-
-        let params = [
-            "path": "settings:/kef/play/physicalSource",
-            "roles": "value",
-            "value": payload,
-        ]
-
-        _ = try await makeRequest(endpoint: "/api/setData", params: params)
+        try await setData(
+            path: "settings:/kef/play/physicalSource",
+            roles: "value",
+            value: ["type": "kefPhysicalSource", "kefPhysicalSource": source.rawValue]
+        )
     }
 
     /// Get the current input source
@@ -334,17 +316,11 @@ public actor KEFSpeaker {
         // The API uses "powerOn" not the status enum value
         let physicalSourceValue = status == .powerOn ? "powerOn" : status.rawValue
 
-        let payload = """
-            {"type":"kefPhysicalSource","kefPhysicalSource":"\(physicalSourceValue)"}
-            """
-
-        let params = [
-            "path": "settings:/kef/play/physicalSource",
-            "roles": "value",
-            "value": payload,
-        ]
-
-        _ = try await makeRequest(endpoint: "/api/setData", params: params)
+        try await setData(
+            path: "settings:/kef/play/physicalSource",
+            roles: "value",
+            value: ["type": "kefPhysicalSource", "kefPhysicalSource": physicalSourceValue]
+        )
     }
 
     // MARK: - Track Control
@@ -365,17 +341,11 @@ public actor KEFSpeaker {
     }
 
     private func trackControl(command: String) async throws {
-        let payload = """
-            {"control":"\(command)"}
-            """
-
-        let params = [
-            "path": "player:player/control",
-            "roles": "activate",
-            "value": payload,
-        ]
-
-        _ = try await makeRequest(endpoint: "/api/setData", params: params)
+        try await setData(
+            path: "player:player/control",
+            roles: "activate",
+            value: ["control": command]
+        )
     }
 
     // MARK: - Song Information
@@ -761,6 +731,28 @@ public actor KEFSpeaker {
                 }
             }
         }
+    }
+
+    // MARK: - Control Helper
+
+    /// Writes a value to the speaker's control API.
+    ///
+    /// The `/api/setData` endpoint requires a POST with a JSON body; a GET is
+    /// rejected with HTTP 405 "Invalid method!". `value` is sent as a nested
+    /// JSON object, e.g. `["type": "i32_", "i32_": 50]`.
+    private func setData(path: String, roles: String, value: [String: Any]) async throws {
+        let body: [String: Any] = [
+            "path": path,
+            "roles": roles,
+            "value": value,
+        ]
+
+        _ = try await makeRequest(
+            endpoint: "/api/setData",
+            params: [:],
+            method: .POST,
+            jsonBody: body
+        )
     }
 
     // MARK: - HTTP Request Helper
